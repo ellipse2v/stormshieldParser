@@ -921,12 +921,31 @@ class StormshieldMultiFormatGenerator:
         
         return csaf_doc
     
+    @staticmethod
+    def _safe_output_path(directory, filename):
+        """Builds a path for filename inside directory, rejecting path traversal.
+
+        Advisory and CVE identifiers come from remote data, so any character
+        outside [A-Za-z0-9._-] is replaced and the resolved path must stay
+        within the target directory.
+        """
+        safe_name = re.sub(r'[^A-Za-z0-9._-]', '_', str(filename)).lstrip('.')
+        if not safe_name:
+            raise ValueError(f"Invalid output filename: {filename!r}")
+        base = Path(directory).resolve()
+        target = (base / safe_name).resolve()
+        if target.parent != base:
+            raise ValueError(f"Output path escapes directory: {filename!r}")
+        return target
+
     def save_documents(self, advisory_data):
         """Saves all formats for a given advisory."""
         try:
             # 1. CSAF VEX
             csaf_vex = self.generate_csaf_vex(advisory_data)
-            csaf_vex_file = self.csaf_vex_dir / f"stormshield-{advisory_data['id']}.json"
+            csaf_vex_file = self._safe_output_path(
+                self.csaf_vex_dir, f"stormshield-{advisory_data['id']}.json"
+            )
             with open(csaf_vex_file, 'w', encoding='utf-8') as f:
                 json.dump(csaf_vex, f, indent=2, ensure_ascii=False)
             
@@ -934,7 +953,9 @@ class StormshieldMultiFormatGenerator:
             for cve in advisory_data['cves']:
                 csaf_cve = self.generate_csaf_cve_individual(advisory_data, cve)
                 cve_safe = cve.lower().replace('-', '_')
-                csaf_cve_file = self.csaf_cve_dir / f"{cve_safe}-{advisory_data['id']}.json"
+                csaf_cve_file = self._safe_output_path(
+                    self.csaf_cve_dir, f"{cve_safe}-{advisory_data['id']}.json"
+                )
                 with open(csaf_cve_file, 'w', encoding='utf-8') as f:
                     json.dump(csaf_cve, f, indent=2, ensure_ascii=False)
             
